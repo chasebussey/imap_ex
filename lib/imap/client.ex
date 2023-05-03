@@ -16,15 +16,15 @@ defmodule ImapEx.Imap.Client do
   end
 
   def login(pid) do
-    GenServer.call(pid, :login)
+    GenServer.cast(pid, :login)
   end
 
   def logout(pid) do
-    GenServer.call(pid, :logout)
+    GenServer.cast(pid, :logout)
   end
 
   def select(pid, mailbox) do
-    GenServer.call(pid, {:select, mailbox})
+    GenServer.cast(pid, {:select, mailbox})
   end
 
   @impl true
@@ -35,7 +35,7 @@ defmodule ImapEx.Imap.Client do
 
   @impl true
   def handle_info({:initialize, args}, _state) do
-    opts = [packet: :line, active: :once, mode: :binary]
+    opts = [packet: :line, active: :true, mode: :binary]
 
     {:ok, socket} =
       :gen_tcp.connect(args[:hostname], args[:port], opts)
@@ -51,50 +51,44 @@ defmodule ImapEx.Imap.Client do
   end
 
   @impl true
-  def handle_info({_socket_type, _socket, msg}, conn) do
-    IO.inspect(msg, label: "in the not_misc handle_info")
-
-    if (!conn.received_server_greeting) do
-      %{conn | received_server_greeting: true}
-      |> send_command("login \"#{conn.username}\" \"#{conn.password}\"")
-    end
+  def handle_info({:tcp, _socket, msg}, conn) do
+    IO.inspect(msg, label: "S")
 
     {:noreply, conn}
   end
 
   @impl true
-  def handle_info({:server_response, msg}, conn) do
-    IO.inspect(msg, label: "S:")
+  def handle_info({:tcp_closed, _socket}, conn) do
     {:noreply, conn}
   end
 
   @impl true
-  def handle_call(:login, _from, conn) do
-    :gen_tcp.send(conn.socket, "#{conn.tag} login \"#{conn.username}\" \"#{conn.password}\"")
-    Map.put(conn, :tag, conn.tag + 1)
-    {:reply, :ok, conn}
+  def handle_cast(:login, conn) do
+    send_command(conn, "login #{conn.username} #{conn.password}")
+    {:noreply, conn}
   end
 
   @impl true
-  def handle_call(:logout, _from, conn) do
+  def handle_cast(:logout, conn) do
     send_command(conn, "logout")
-    {:reply, :ok, conn}
+    {:noreply, conn}
   end
 
   @impl true
-  def handle_call({:select, mailbox}, _from, conn) do
+  def handle_cast({:select, mailbox}, conn) do
     send_command(conn, "select #{mailbox}")
     Map.put(conn, :mailbox, mailbox)
-    {:reply, :ok, conn}
+    {:noreply, conn}
   end
 
   defp send_command(conn, command) do
     command = "#{conn.tag} #{command}\r\n"
-    Map.put(conn, :tag, conn.tag + 1)
+    conn = Map.put(conn, :tag, conn.tag + 1)
+
+    IO.inspect(command, label: "sending command")
 
     :gen_tcp.send(conn.socket, command)
-    {:ok, packet} = :gen_tcp.recv(conn.socket, 0)
 
-    send(self(), {:server_response, packet})
+    conn
   end
 end

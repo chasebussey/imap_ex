@@ -6,6 +6,5 @@ defmodule ImapEx.Imap.Connection do
     :socket,
     :mailbox,
     tag: 0,
-    received_server_greeting: false
   ]
 end
