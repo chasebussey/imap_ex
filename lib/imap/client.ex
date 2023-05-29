@@ -16,8 +16,8 @@ defmodule ImapEx.Imap.Client do
     GenServer.start_link(__MODULE__, args)
   end
 
-  def login(pid) do
-    GenServer.call(pid, :login)
+  def login(pid, username, password) do
+    GenServer.call(pid, {:login, username: username, password: password})
   end
 
   def logout(pid) do
@@ -47,7 +47,6 @@ defmodule ImapEx.Imap.Client do
         %Connection{
           hostname: args[:hostname],
           username: args[:username],
-          password: args[:password],
           socket: socket
         }
         |> receive_response()
@@ -75,13 +74,18 @@ defmodule ImapEx.Imap.Client do
   end
 
   @impl true
-  def handle_call(:login, _from, conn) do
+  def handle_call({:login, username: username, password: password}, _from, conn) do
     conn = 
       conn
-      |> send_command("login #{conn.username} #{conn.password}")
+      |> send_command("login #{username} #{password}")
       |> receive_response()
 
-    {:noreply, conn}
+    case conn.last_status do
+      "OK" -> {:reply, {:ok, "Logged in"}, conn}
+      "NO" -> {:reply, {:error, "Authentication failed"}, conn}
+      "BAD" -> {:reply, {:error, "Malformed request"}, conn}
+      _ -> {:reply, {:error, "An unknown error occurred"}, conn}
+    end
   end
 
   @impl true
