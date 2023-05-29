@@ -17,7 +17,7 @@ defmodule ImapEx.Imap.Client do
   end
 
   def login(pid) do
-    GenServer.cast(pid, :login)
+    GenServer.call(pid, :login)
   end
 
   def logout(pid) do
@@ -42,17 +42,19 @@ defmodule ImapEx.Imap.Client do
   def handle_info({:initialize, args}, _state) do
     opts = [packet: :line, active: :false, mode: :binary]
 
-    {:ok, socket} =
-      :gen_tcp.connect(args[:hostname], args[:port], opts)
+    case :gen_tcp.connect(args[:hostname], args[:port], opts) do
+      {:ok, socket} -> {:noreply,
+        %Connection{
+          hostname: args[:hostname],
+          username: args[:username],
+          password: args[:password],
+          socket: socket
+        }
+        |> receive_response()
+      }
 
-    conn = %Connection{
-      hostname: args[:hostname],
-      username: args[:username],
-      password: args[:password],
-      socket: socket,
-    }
-
-    {:noreply, conn}
+      {:error, reason} -> {:stop, reason, nil}
+    end
   end
 
   @impl true
@@ -73,7 +75,7 @@ defmodule ImapEx.Imap.Client do
   end
 
   @impl true
-  def handle_cast(:login, conn) do
+  def handle_call(:login, _from, conn) do
     conn = 
       conn
       |> send_command("login #{conn.username} #{conn.password}")
