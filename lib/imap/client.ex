@@ -1,5 +1,6 @@
 defmodule ImapEx.Imap.Client do
   alias ImapEx.Imap.Connection
+  alias ImapEx.Imap.Response
 
   use GenServer
 
@@ -27,6 +28,10 @@ defmodule ImapEx.Imap.Client do
     GenServer.cast(pid, {:select, mailbox})
   end
 
+  def get_status(pid) do
+    GenServer.call(pid, :get_status)
+  end
+
   @impl true
   def init(args) do
     send(self(), {:initialize, args})
@@ -35,7 +40,7 @@ defmodule ImapEx.Imap.Client do
 
   @impl true
   def handle_info({:initialize, args}, _state) do
-    opts = [packet: :line, active: :true, mode: :binary]
+    opts = [packet: :line, active: :false, mode: :binary]
 
     {:ok, socket} =
       :gen_tcp.connect(args[:hostname], args[:port], opts)
@@ -63,8 +68,17 @@ defmodule ImapEx.Imap.Client do
   end
 
   @impl true
+  def handle_call(:get_status, _from, conn) do
+    {:reply, conn.last_status, conn}
+  end
+
+  @impl true
   def handle_cast(:login, conn) do
-    send_command(conn, "login #{conn.username} #{conn.password}")
+    conn = 
+      conn
+      |> send_command("login #{conn.username} #{conn.password}")
+      |> receive_response()
+
     {:noreply, conn}
   end
 
@@ -90,5 +104,12 @@ defmodule ImapEx.Imap.Client do
     :gen_tcp.send(conn.socket, command)
 
     conn
+  end
+
+  defp receive_response(conn) do
+    {:ok, raw_response} = :gen_tcp.recv(conn.socket, 0, 10000)
+    response = Response.parse_response(raw_response)
+
+    Map.put(conn, :last_status, response.status)
   end
 end

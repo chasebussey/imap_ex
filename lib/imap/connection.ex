@@ -5,6 +5,7 @@ defmodule ImapEx.Imap.Connection do
     :password,
     :socket,
     :mailbox,
+    :last_status,
     tag: 0,
   ]
 end
