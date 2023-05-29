@@ -21,7 +21,7 @@ defmodule ImapEx.Imap.Client do
   end
 
   def logout(pid) do
-    GenServer.cast(pid, :logout)
+    GenServer.call(pid, :logout)
   end
 
   def select(pid, mailbox) do
@@ -89,9 +89,13 @@ defmodule ImapEx.Imap.Client do
   end
 
   @impl true
-  def handle_cast(:logout, conn) do
-    send_command(conn, "logout")
-    {:noreply, conn}
+  def handle_call(:logout, _from, conn) do
+    conn =
+      conn
+      |> send_command("logout")
+      |> receive_response()
+
+    {:reply, {:ok, "Logged out"}, conn}
   end
 
   @impl true
@@ -116,6 +120,7 @@ defmodule ImapEx.Imap.Client do
     {:ok, raw_response} = :gen_tcp.recv(conn.socket, 0, 10000)
     response = Response.parse_response(raw_response)
 
+    IO.inspect(response)
     Map.put(conn, :last_status, response.status)
   end
 end

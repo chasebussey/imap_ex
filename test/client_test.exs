@@ -39,4 +39,13 @@ defmodule ClientTest do
       assert Client.login(pid, @invalid_args[:username], @invalid_args[:password]) == expected_result
     end
   end
+
+  describe "logout/1" do
+    test "returns BYE msg" do
+      {:ok, pid} = Client.start_link(@server_args)
+
+      expected_result = {:ok, "Logged out"}
+      assert Client.logout(pid) == expected_result
+    end
+  end
 end
